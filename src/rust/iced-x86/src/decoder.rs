@@ -1399,6 +1399,141 @@ impl<'a> Decoder<'a> {
 		}
 	}
 
+	/// Decodes a single instruction in 16 bit mode with a temporary decoder.
+	/// This method may be faster for sparse decoding, since it is able to better utilize the stack and in-module inlining.
+	///
+	/// # Arguments
+	///
+	/// * `data`: Data to decode as an array of 16 bytes to prevent aliasing and promote vectorization
+	/// * `ip`: `RIP` value
+	/// * `options`: Decoder options, `0` or eg. `DecoderOptions::NO_INVALID_CHECK | DecoderOptions::AMD`
+	/// 
+	/// See also [`try_with_ip()`].
+	#[inline]
+	pub fn decode_single_16(data: [u8; 16], ip: u64, options: u32) -> Instruction {
+		let mut instruction = mem::MaybeUninit::uninit();
+		// SAFETY: decode_out_ptr() initializes the whole instruction (all fields) with valid values
+		unsafe {
+			Self::decode_out_ptr_single_16(data, ip, options, instruction.as_mut_ptr());
+			instruction.assume_init()
+		}
+	}
+
+	/// Decodes a single instruction in 32 bit mode with a temporary decoder.
+	/// This method may be faster for sparse decoding, since it is able to better utilize the stack and in-module inlining.
+	///
+	/// # Arguments
+	///
+	/// * `data`: Data to decode as an array of 16 bytes to prevent aliasing and promote vectorization
+	/// * `ip`: `RIP` value
+	/// * `options`: Decoder options, `0` or eg. `DecoderOptions::NO_INVALID_CHECK | DecoderOptions::AMD`
+	/// 
+	/// See also [`try_with_ip()`].
+	#[inline]
+	pub fn decode_single_32(data: [u8; 16], ip: u64, options: u32) -> Instruction {
+		let mut instruction = mem::MaybeUninit::uninit();
+		// SAFETY: decode_out_ptr() initializes the whole instruction (all fields) with valid values
+		unsafe {
+			Self::decode_out_ptr_single_32(data, ip, options, instruction.as_mut_ptr());
+			instruction.assume_init()
+		}
+	}
+
+	/// Decodes a single instruction in 64 bit mode with a temporary decoder.
+	/// This method may be faster for sparse decoding, since it is able to better utilize the stack and in-module inlining.
+	///
+	/// # Arguments
+	///
+	/// * `data`: Data to decode as an array of 16 bytes to prevent aliasing and promote vectorization
+	/// * `ip`: `RIP` value
+	/// * `options`: Decoder options, `0` or eg. `DecoderOptions::NO_INVALID_CHECK | DecoderOptions::AMD`
+	/// 
+	/// See also [`try_with_ip()`].
+	#[inline]
+	pub fn decode_single_64(data: [u8; 16], ip: u64, options: u32) -> Instruction {
+		let mut instruction = mem::MaybeUninit::uninit();
+		// SAFETY: decode_out_ptr() initializes the whole instruction (all fields) with valid values
+		unsafe {
+			Self::decode_out_ptr_single_64(data, ip, options, instruction.as_mut_ptr());
+			instruction.assume_init()
+		}
+	}
+
+	/// Decodes a single instruction in 16 bit mode with a temporary decoder, writing to an `out` argument.
+	/// This method may be faster for sparse decoding, since it is able to better utilize the stack and in-module inlining.
+	///
+	/// # Arguments
+	///
+	/// * `data`: Data to decode as an array of 16 bytes to prevent aliasing and promote vectorization
+	/// * `ip`: `RIP` value
+	/// * `options`: Decoder options, `0` or eg. `DecoderOptions::NO_INVALID_CHECK | DecoderOptions::AMD`
+	/// * `instruction`: Updated with the decoded instruction. All fields are initialized (it's an `out` argument)
+	/// 
+	/// See also [`try_with_ip()`].
+	#[inline]
+	pub fn decode_out_single_16(data: [u8; 16], ip: u64, options: u32, instruction: &mut Instruction) {
+		unsafe {
+			Self::decode_out_ptr_single_16(data, ip, options, instruction);
+		}
+	}
+
+	/// Decodes a single instruction in 16 bit mode with a temporary decoder, writing to an `out` argument.
+	/// This method may be faster for sparse decoding, since it is able to better utilize the stack and in-module inlining.
+	///
+	/// # Arguments
+	///
+	/// * `data`: Data to decode as an array of 16 bytes to prevent aliasing and promote vectorization
+	/// * `ip`: `RIP` value
+	/// * `options`: Decoder options, `0` or eg. `DecoderOptions::NO_INVALID_CHECK | DecoderOptions::AMD`
+	/// * `instruction`: Updated with the decoded instruction. All fields are initialized (it's an `out` argument)
+	/// 
+	/// See also [`try_with_ip()`].
+	#[inline]
+	pub fn decode_out_single_32(data: [u8; 16], ip: u64, options: u32, instruction: &mut Instruction) {
+		unsafe {
+			Self::decode_out_ptr_single_32(data, ip, options, instruction);
+		}
+	}
+
+	/// Decodes a single instruction in 16 bit mode with a temporary decoder, writing to an `out` argument.
+	/// This method may be faster for sparse decoding, since it is able to better utilize the stack and in-module inlining.
+	///
+	/// # Arguments
+	///
+	/// * `data`: Data to decode as an array of 16 bytes to prevent aliasing and promote vectorization
+	/// * `ip`: `RIP` value
+	/// * `options`: Decoder options, `0` or eg. `DecoderOptions::NO_INVALID_CHECK | DecoderOptions::AMD`
+	/// * `instruction`: Updated with the decoded instruction. All fields are initialized (it's an `out` argument)
+	/// 
+	/// See also [`try_with_ip()`].
+	#[inline]
+	pub fn decode_out_single_64(data: [u8; 16], ip: u64, options: u32, instruction: &mut Instruction) {
+		unsafe {
+			Self::decode_out_ptr_single_64(data, ip, options, instruction);
+		}
+	}
+
+	unsafe fn decode_out_ptr_single_16(data: [u8; 16], ip: u64, options: u32, instruction: *mut Instruction) {
+		let mut decoder = Decoder::try_with_ip(16, data.as_slice(), ip, options).expect("data must be a valid reference");
+		unsafe {
+			decoder.decode_out_ptr(instruction);
+		}
+	}
+
+	unsafe fn decode_out_ptr_single_32(data: [u8; 16], ip: u64, options: u32, instruction: *mut Instruction) {
+		let mut decoder = Decoder::try_with_ip(32, data.as_slice(), ip, options).expect("data must be a valid reference");
+		unsafe {
+			decoder.decode_out_ptr(instruction);
+		}
+	}
+
+	unsafe fn decode_out_ptr_single_64(data: [u8; 16], ip: u64, options: u32, instruction: *mut Instruction) {
+		let mut decoder = Decoder::try_with_ip(64, data.as_slice(), ip, options).expect("data must be a valid reference");
+		unsafe {
+			decoder.decode_out_ptr(instruction);
+		}
+	}
+
 	#[inline(always)]
 	fn reset_rex_prefix_state(&mut self) {
 		self.state.flags &= !(StateFlags::HAS_REX | StateFlags::W);
