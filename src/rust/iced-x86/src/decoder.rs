@@ -93,7 +93,7 @@ mod table_de;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use crate::decoder::handlers::tables::TABLES;
+use crate::decoder::handlers::tables::{Tables, TABLES};
 use crate::decoder::handlers::{OpCodeHandler, OpCodeHandlerDecodeFn};
 use crate::iced_constants::IcedConstants;
 use crate::iced_error::IcedError;
@@ -102,6 +102,40 @@ use crate::tuple_type_tbl::get_disp8n;
 use crate::*;
 use core::iter::FusedIterator;
 use core::{cmp, fmt, mem, ptr};
+
+#[rustfmt::skip]
+#[cfg(not(feature = "__internal_flip"))]
+static READ_OP_MEM_FNS: [fn(&mut Instruction, &mut Decoder<'_>) -> bool; 0x18] = [
+	Decoder::read_op_mem_0,
+	Decoder::read_op_mem_0,
+	Decoder::read_op_mem_0,
+	Decoder::read_op_mem_0,
+	Decoder::read_op_mem_0_4,
+	Decoder::read_op_mem_0_5,
+	Decoder::read_op_mem_0,
+	Decoder::read_op_mem_0,
+
+	Decoder::read_op_mem_1,
+	Decoder::read_op_mem_1,
+	Decoder::read_op_mem_1,
+	Decoder::read_op_mem_1,
+	Decoder::read_op_mem_1_4,
+	Decoder::read_op_mem_1,
+	Decoder::read_op_mem_1,
+	Decoder::read_op_mem_1,
+
+	Decoder::read_op_mem_2,
+	Decoder::read_op_mem_2,
+	Decoder::read_op_mem_2,
+	Decoder::read_op_mem_2,
+	Decoder::read_op_mem_2_4,
+	Decoder::read_op_mem_2,
+	Decoder::read_op_mem_2,
+	Decoder::read_op_mem_2,
+];
+
+#[cfg(feature = "__internal_flip")]
+static READ_OP_MEM_FNS: [fn(&mut Instruction, &mut Decoder<'_>) -> bool; 0x18] = ();
 
 #[rustfmt::skip]
 #[cfg(any(feature = "__internal_flip", not(feature = "no_evex"), not(feature = "no_vex"), not(feature = "no_xop"), feature = "mvex"))]
@@ -522,32 +556,10 @@ where
 	// Initialized to start of data (data_ptr) when decode() is called. Used to calculate current IP/offset (when decoding) if needed.
 	instr_start_data_ptr: usize,
 
-	handlers_map0: &'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler); 0x100],
-	// MAP0 is only used by MVEX. Don't allocate an extra array element if mvex feature is disabled (common case)
-	#[cfg(all(not(feature = "no_vex"), feature = "mvex"))]
-	handlers_vex_map0: &'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler); 0x100],
-	#[cfg(not(feature = "no_vex"))]
-	handlers_vex: [&'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler); 0x100]; 3],
-	#[cfg(not(feature = "no_evex"))]
-	handlers_evex: [&'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler); 0x100]; 6],
-	#[cfg(not(feature = "no_xop"))]
-	handlers_xop: [&'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler); 0x100]; 3],
-	#[cfg(feature = "mvex")]
-	handlers_mvex: [&'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler); 0x100]; 3],
-
-	#[cfg(not(all(not(feature = "no_vex"), feature = "mvex")))]
-	handlers_vex_map0: (),
-	#[cfg(feature = "no_vex")]
-	handlers_vex: [(); 3],
-	#[cfg(feature = "no_evex")]
-	handlers_evex: [(); 6],
-	#[cfg(feature = "no_xop")]
-	handlers_xop: [(); 3],
-	#[cfg(not(feature = "mvex"))]
-	handlers_mvex: [(); 3],
+	handler_tables: &'static Tables,
 
 	#[cfg(not(feature = "__internal_flip"))]
-	read_op_mem_fns: [fn(&mut Instruction, &mut Decoder<'a>) -> bool; 0x18],
+	read_op_mem_fns: &'static [fn(&mut Instruction, &mut Decoder<'_>) -> bool; 0x18],
 	#[cfg(feature = "__internal_flip")]
 	read_op_mem_fns: (),
 
@@ -914,87 +926,8 @@ impl<'a> Decoder<'a> {
 			return Err(IcedError::new("Invalid slice"));
 		}
 
-		let tables = &*TABLES;
-
-		#[allow(clippy::unwrap_used)]
-		fn get_handlers(
-			handlers: &'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler)],
-		) -> &'static [(OpCodeHandlerDecodeFn, &'static OpCodeHandler); 0x100] {
-			debug_assert_eq!(handlers.len(), 0x100);
-			TryFrom::try_from(handlers).unwrap()
-		}
-		macro_rules! mk_handlers_local {
-			($name:ident, $feature:literal) => {
-				mk_handlers_local!($name, $name, $feature);
-			};
-			($name:ident, $field_name:ident, $feature:literal) => {
-				#[cfg(not(feature = $feature))]
-				let $name = get_handlers(&tables.$field_name);
-				#[cfg(feature = $feature)]
-				let $name = ();
-			};
-			($name:ident ; $feature:literal) => {
-				mk_handlers_local!($name, $name ; $feature);
-			};
-			($name:ident, $field_name:ident ; $feature:literal) => {
-				#[cfg(feature = $feature)]
-				let $name = get_handlers(&tables.$field_name);
-				#[cfg(not(feature = $feature))]
-				let $name = ();
-			};
-		}
-		#[cfg(all(not(feature = "no_vex"), feature = "mvex"))]
-		let handlers_vex_map0 = get_handlers(&tables.handlers_vex_map0);
-		#[cfg(not(all(not(feature = "no_vex"), feature = "mvex")))]
-		let handlers_vex_map0 = ();
-		mk_handlers_local!(handlers_vex_0f, "no_vex");
-		mk_handlers_local!(handlers_vex_0f38, "no_vex");
-		mk_handlers_local!(handlers_vex_0f3a, "no_vex");
-		mk_handlers_local!(handlers_evex_0f, "no_evex");
-		mk_handlers_local!(handlers_evex_0f38, "no_evex");
-		mk_handlers_local!(handlers_evex_0f3a, "no_evex");
-		mk_handlers_local!(handlers_evex_map4, invalid_map, "no_evex");
-		mk_handlers_local!(handlers_evex_map5, "no_evex");
-		mk_handlers_local!(handlers_evex_map6, "no_evex");
-		mk_handlers_local!(handlers_xop_map8, "no_xop");
-		mk_handlers_local!(handlers_xop_map9, "no_xop");
-		mk_handlers_local!(handlers_xop_map10, "no_xop");
-		mk_handlers_local!(handlers_mvex_0f ; "mvex");
-		mk_handlers_local!(handlers_mvex_0f38 ; "mvex");
-		mk_handlers_local!(handlers_mvex_0f3a ; "mvex");
-
-		#[rustfmt::skip]
-		#[cfg(not(feature = "__internal_flip"))]
-		let read_op_mem_fns = [
-			Decoder::read_op_mem_0,
-			Decoder::read_op_mem_0,
-			Decoder::read_op_mem_0,
-			Decoder::read_op_mem_0,
-			Decoder::read_op_mem_0_4,
-			Decoder::read_op_mem_0_5,
-			Decoder::read_op_mem_0,
-			Decoder::read_op_mem_0,
-
-			Decoder::read_op_mem_1,
-			Decoder::read_op_mem_1,
-			Decoder::read_op_mem_1,
-			Decoder::read_op_mem_1,
-			Decoder::read_op_mem_1_4,
-			Decoder::read_op_mem_1,
-			Decoder::read_op_mem_1,
-			Decoder::read_op_mem_1,
-
-			Decoder::read_op_mem_2,
-			Decoder::read_op_mem_2,
-			Decoder::read_op_mem_2,
-			Decoder::read_op_mem_2,
-			Decoder::read_op_mem_2_4,
-			Decoder::read_op_mem_2,
-			Decoder::read_op_mem_2,
-			Decoder::read_op_mem_2,
-		];
-		#[cfg(feature = "__internal_flip")]
-		let read_op_mem_fns = ();
+		let handler_tables = &*TABLES;
+		let read_op_mem_fns = &READ_OP_MEM_FNS;
 
 		Ok(Decoder {
 			ip,
@@ -1002,12 +935,7 @@ impl<'a> Decoder<'a> {
 			data_ptr_end,
 			max_data_ptr: data.as_ptr() as usize,
 			instr_start_data_ptr: data.as_ptr() as usize,
-			handlers_map0: get_handlers(&tables.handlers_map0),
-			handlers_vex_map0,
-			handlers_vex: [handlers_vex_0f, handlers_vex_0f38, handlers_vex_0f3a],
-			handlers_evex: [handlers_evex_0f, handlers_evex_0f38, handlers_evex_0f3a, handlers_evex_map4, handlers_evex_map5, handlers_evex_map6],
-			handlers_xop: [handlers_xop_map8, handlers_xop_map9, handlers_xop_map10],
-			handlers_mvex: [handlers_mvex_0f, handlers_mvex_0f38, handlers_mvex_0f3a],
+			handler_tables,
 			read_op_mem_fns,
 			state: State::default(),
 			options,
@@ -1397,10 +1325,10 @@ impl<'a> Decoder<'a> {
 		self.max_data_ptr = cmp::min(data_ptr + IcedConstants::MAX_INSTRUCTION_LENGTH, self.data_ptr_end);
 
 		let b = self.read_u8();
-		let mut handler = self.handlers_map0[b];
+		let mut handler = self.handler_tables.handlers_map0[b];
 		if ((b as u32) & self.rex_mask) == 0x40 {
 			debug_assert!(self.is64b_mode);
-			handler = self.handlers_map0[self.read_u8()];
+			handler = self.handler_tables.handlers_map0[self.read_u8()];
 			let mut flags = self.state.flags | StateFlags::HAS_REX;
 			if (b & 8) != 0 {
 				flags |= StateFlags::W;
@@ -1487,7 +1415,7 @@ impl<'a> Decoder<'a> {
 	#[inline(always)]
 	fn call_opcode_handlers_map0_table(&mut self, instruction: &mut Instruction) {
 		let b = self.read_u8();
-		self.decode_table2(self.handlers_map0[b], instruction);
+		self.decode_table2(self.handler_tables.handlers_map0[b], instruction);
 	}
 
 	#[must_use]
@@ -1598,7 +1526,7 @@ impl<'a> Decoder<'a> {
 		}
 
 		let b = self.read_u8();
-		let (decode, handler) = self.handlers_vex[0][b];
+		let (decode, handler) = self.handler_tables.handlers_vex[0][b];
 
 		let mut b = self.state.modrm;
 
@@ -1669,7 +1597,7 @@ impl<'a> Decoder<'a> {
 		self.state.extra_index_register_base = (b1x >> 3) & 8;
 		self.state.extra_base_register_base = (b1x >> 2) & 8;
 
-		if let Some(&table) = self.handlers_vex.get(((b1 & 0x1F) as usize).wrapping_sub(1)) {
+		if let Some(table) = self.handler_tables.handlers_vex.get(((b1 & 0x1F) as usize).wrapping_sub(1)) {
 			self.decode_table2(table[(b2 >> 8) as usize], instruction);
 		} else {
 			#[cfg(feature = "mvex")]
@@ -1725,7 +1653,7 @@ impl<'a> Decoder<'a> {
 		self.state.extra_index_register_base = (b1x >> 3) & 8;
 		self.state.extra_base_register_base = (b1x >> 2) & 8;
 
-		if let Some(&table) = self.handlers_xop.get(((b1 & 0x1F) as usize).wrapping_sub(8)) {
+		if let Some(table) = self.handler_tables.handlers_xop.get(((b1 & 0x1F) as usize).wrapping_sub(8)) {
 			self.decode_table2(table[(b2 >> 8) as usize], instruction);
 		} else {
 			self.set_invalid_instruction();
@@ -1812,7 +1740,7 @@ impl<'a> Decoder<'a> {
 						self.state.flags |= (!p2 & 8) << 3;
 					}
 
-					if let Some(&table) = self.handlers_evex.get(((p0 & 7) as usize).wrapping_sub(1)) {
+					if let Some(table) = self.handler_tables.handlers_evex.get(((p0 & 7) as usize).wrapping_sub(1)) {
 						let (decode, handler) = table[(d >> 16) as u8 as usize];
 						debug_assert!(handler.has_modrm);
 						let m = d >> 24;

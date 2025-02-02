@@ -7,89 +7,33 @@ use alloc::vec::Vec;
 use lazy_static::lazy_static;
 
 pub(in crate::decoder) struct Tables {
-	#[cfg(not(feature = "no_evex"))]
-	pub(in crate::decoder) invalid_map: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(feature = "no_evex")]
-	#[allow(dead_code)]
-	invalid_map: (),
-
 	pub(in crate::decoder) handlers_map0: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
 	#[cfg(not(feature = "no_vex"))]
 	#[allow(dead_code)]
 	pub(in crate::decoder) handlers_vex_map0: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
 	#[cfg(not(feature = "no_vex"))]
-	pub(in crate::decoder) handlers_vex_0f: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_vex"))]
-	pub(in crate::decoder) handlers_vex_0f38: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_vex"))]
-	pub(in crate::decoder) handlers_vex_0f3a: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
+	pub(in crate::decoder) handlers_vex: [Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>; 3],
 	#[cfg(not(feature = "no_evex"))]
-	pub(in crate::decoder) handlers_evex_0f: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_evex"))]
-	pub(in crate::decoder) handlers_evex_0f38: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_evex"))]
-	pub(in crate::decoder) handlers_evex_0f3a: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_evex"))]
-	pub(in crate::decoder) handlers_evex_map5: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_evex"))]
-	pub(in crate::decoder) handlers_evex_map6: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
+	pub(in crate::decoder) handlers_evex: [Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>; 6],
 	#[cfg(not(feature = "no_xop"))]
-	pub(in crate::decoder) handlers_xop_map8: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_xop"))]
-	pub(in crate::decoder) handlers_xop_map9: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(not(feature = "no_xop"))]
-	pub(in crate::decoder) handlers_xop_map10: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
+	pub(in crate::decoder) handlers_xop: [Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>; 3],
 	#[cfg(feature = "mvex")]
-	pub(in crate::decoder) handlers_mvex_0f: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(feature = "mvex")]
-	pub(in crate::decoder) handlers_mvex_0f38: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
-	#[cfg(feature = "mvex")]
-	pub(in crate::decoder) handlers_mvex_0f3a: Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>,
+	pub(in crate::decoder) handlers_mvex: [Vec<(OpCodeHandlerDecodeFn, &'static OpCodeHandler)>; 3],
 	#[cfg(feature = "no_vex")]
 	#[allow(dead_code)]
 	handlers_vex_map0: (),
 	#[cfg(feature = "no_vex")]
 	#[allow(dead_code)]
-	handlers_vex_0f: (),
-	#[cfg(feature = "no_vex")]
-	#[allow(dead_code)]
-	handlers_vex_0f38: (),
-	#[cfg(feature = "no_vex")]
-	#[allow(dead_code)]
-	handlers_vex_0f3a: (),
+	handlers_vex: [(); 3],
 	#[cfg(feature = "no_evex")]
 	#[allow(dead_code)]
-	handlers_evex_0f: (),
-	#[cfg(feature = "no_evex")]
-	#[allow(dead_code)]
-	handlers_evex_0f38: (),
-	#[cfg(feature = "no_evex")]
-	#[allow(dead_code)]
-	handlers_evex_0f3a: (),
-	#[cfg(feature = "no_evex")]
-	#[allow(dead_code)]
-	handlers_evex_map5: (),
-	#[cfg(feature = "no_evex")]
-	#[allow(dead_code)]
-	handlers_evex_map6: (),
+	handlers_evex: [(); 6],
 	#[cfg(feature = "no_xop")]
 	#[allow(dead_code)]
-	handlers_xop_map8: (),
-	#[cfg(feature = "no_xop")]
-	#[allow(dead_code)]
-	handlers_xop_map9: (),
-	#[cfg(feature = "no_xop")]
-	#[allow(dead_code)]
-	handlers_xop_map10: (),
+	handlers_xop: [(); 3],
 	#[cfg(not(feature = "mvex"))]
 	#[allow(dead_code)]
-	handlers_mvex_0f: (),
-	#[cfg(not(feature = "mvex"))]
-	#[allow(dead_code)]
-	handlers_mvex_0f38: (),
-	#[cfg(not(feature = "mvex"))]
-	#[allow(dead_code)]
-	handlers_mvex_0f3a: (),
+	handlers_mvex: [(); 3],
 }
 
 lazy_static! {
@@ -117,23 +61,12 @@ lazy_static! {
 		#[cfg(feature = "no_evex")]
 		let invalid_map = ();
 		Tables {
-			invalid_map,
 			handlers_map0,
 			handlers_vex_map0,
-			handlers_vex_0f,
-			handlers_vex_0f38,
-			handlers_vex_0f3a,
-			handlers_evex_0f,
-			handlers_evex_0f38,
-			handlers_evex_0f3a,
-			handlers_evex_map5,
-			handlers_evex_map6,
-			handlers_xop_map8,
-			handlers_xop_map9,
-			handlers_xop_map10,
-			handlers_mvex_0f,
-			handlers_mvex_0f38,
-			handlers_mvex_0f3a,
+			handlers_vex: [handlers_vex_0f, handlers_vex_0f38, handlers_vex_0f3a],
+			handlers_evex: [handlers_evex_0f, handlers_evex_0f38, handlers_evex_0f3a, invalid_map, handlers_evex_map5, handlers_evex_map6],
+			handlers_xop: [handlers_xop_map8, handlers_xop_map9, handlers_xop_map10],
+			handlers_mvex: [handlers_mvex_0f, handlers_mvex_0f38, handlers_mvex_0f3a],
 		}
 	};
 }
